@@ -1,0 +1,14 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+.env
+family_account.db
+*.db
+.venv/
+dist/
+node_modules/
+.mypy_cache/
+.pytest_cache/

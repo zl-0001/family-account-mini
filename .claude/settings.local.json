@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(curl:*)",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 8000 | Stop-Process -Force\")",
+      "Bash(netstat -ano)",
+      "Bash(taskkill //F //IM python.exe)",
+      "Bash(claude plugin *)",
+      "Bash(claude mcp *)",
+      "Bash(where bash *)",
+      "Read(//c/Program Files/Git/bin/**)",
+      "Read(//c/Program Files \\(x86\\)/Git/bin/**)",
+      "Bash(CLAUDE_CODE_GIT_BASH_PATH=\"D:/SoftWare/Git/usr/bin/bash.exe\" claude plugin *)",
+      "Bash(npx cap *)",
+      "Bash(where gradle *)",
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(ipconfig)",
+      "Bash(venv/Scripts/activate)",
+      "Bash(python -c \"import socket; s=socket.socket\\(\\); s.connect\\(\\('192.168.1.61', 8000\\)\\); print\\('ok'\\)\")",
+      "Bash(venv/Scripts/python *)"
+    ]
+  }
+}
