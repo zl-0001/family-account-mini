@@ -26,6 +26,8 @@
           <text class="cat-icon">{{ cat.icon || '📁' }}</text>
           <text class="cat-name">{{ cat.name }}</text>
           <view class="cat-actions">
+            <text class="action-btn sort" @click.stop="moveCategory(cat, 'up')">↑</text>
+            <text class="action-btn sort" @click.stop="moveCategory(cat, 'down')">↓</text>
             <text class="action-btn" @click.stop="handleEdit(cat)">编辑</text>
             <text class="action-btn delete" @click.stop="handleDelete(cat)">删除</text>
           </view>
@@ -35,6 +37,8 @@
             <text class="cat-icon">{{ child.icon || '📁' }}</text>
             <text class="cat-name">{{ child.name }}</text>
             <view class="cat-actions">
+              <text class="action-btn sort" @click.stop="moveCategory(child, 'up')">↑</text>
+              <text class="action-btn sort" @click.stop="moveCategory(child, 'down')">↓</text>
               <text class="action-btn" @click.stop="handleEdit(child)">编辑</text>
               <text class="action-btn delete" @click.stop="handleDelete(child)">删除</text>
             </view>
@@ -94,6 +98,7 @@ import {
   createCategory,
   updateCategory,
   deleteCategory,
+  reorderCategories,
 } from '@/api'
 
 const activeType = ref<'expense' | 'income'>('expense')
@@ -206,6 +211,29 @@ const handleSave = async () => {
   }
 }
 
+const moveCategory = async (cat: any, direction: 'up' | 'down') => {
+  const flat = categoryList.value
+  const sameLevel = flat.filter((c: any) =>
+    cat.parent_id === null ? c.parent_id === null : c.parent_id === cat.parent_id
+  )
+  const idx = sameLevel.findIndex((c: any) => c.id === cat.id)
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (targetIdx < 0 || targetIdx >= sameLevel.length) return
+
+  const a = sameLevel[idx]
+  const b = sameLevel[targetIdx]
+
+  try {
+    await reorderCategories([
+      { id: a.id, sort_order: targetIdx },
+      { id: b.id, sort_order: idx },
+    ])
+    fetchCategories()
+  } catch (error: any) {
+    uni.showToast({ title: error.message || '排序失败', icon: 'none' })
+  }
+}
+
 const handleDelete = (cat: any) => {
   uni.showModal({
     title: '确认删除',
@@ -302,6 +330,11 @@ onMounted(() => {
         font-size: 24rpx;
         color: #1989fa;
         margin-left: 20rpx;
+
+        &.sort {
+          color: #999;
+          font-size: 28rpx;
+        }
 
         &.delete {
           color: #ff4d4f;

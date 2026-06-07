@@ -90,6 +90,24 @@ class CategoryUpdate(BaseModel):
     color: Optional[str] = None
     is_fixed: Optional[bool] = None
     group: Optional[str] = None
+    sort_order: Optional[int] = None
+
+
+class CategoryReorderItem(BaseModel):
+    id: int
+    sort_order: int
+
+
+@router.put("/reorder")
+def reorder_categories(
+    items: List[CategoryReorderItem],
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """批量更新分类排序"""
+    service = CategoryService(db)
+    service.reorder(items, current_user.id)
+    return {"message": "排序成功"}
 
 
 @router.put("/{category_id}", response_model=CategoryResponse)

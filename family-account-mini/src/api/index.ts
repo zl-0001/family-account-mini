@@ -45,6 +45,9 @@ export const updateCategory = (id: number, data: any) =>
 
 export const deleteCategory = (id: number) => del(`/categories/${id}`)
 
+export const reorderCategories = (items: { id: number; sort_order: number }[]) =>
+  put('/categories/reorder', items)
+
 // 账户相关
 export const getAccounts = () => get('/accounts')
 

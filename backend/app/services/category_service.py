@@ -59,7 +59,7 @@ class CategoryService:
         """更新分类"""
         category = self.db.query(Category).filter(
             Category.id == category_id,
-            Category.user_id == user_id
+            (Category.user_id == user_id) | (Category.user_id == None)
         ).first()
 
         if not category:
@@ -75,7 +75,20 @@ class CategoryService:
             category.color = data.color
         if data.group is not None:
             category.group = data.group
+        if hasattr(data, 'sort_order') and data.sort_order is not None:
+            category.sort_order = data.sort_order
 
         self.db.commit()
         self.db.refresh(category)
         return category
+
+    def reorder(self, items: list, user_id: int):
+        """批量更新排序"""
+        for item in items:
+            category = self.db.query(Category).filter(
+                Category.id == item.id,
+                (Category.user_id == user_id) | (Category.user_id == None)
+            ).first()
+            if category:
+                category.sort_order = item.sort_order
+        self.db.commit()
