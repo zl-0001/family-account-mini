@@ -72,7 +72,7 @@
           <view class="form-item" @click="showCategoryPicker = true">
             <text class="label">支出分类</text>
             <view class="item-value">
-              <text>{{ selectedCategory?.name || '请选择' }}</text>
+              <text>{{ selectedCategoryText }}</text>
               <text class="arrow">›</text>
             </view>
           </view>
@@ -95,24 +95,19 @@
       </view>
     </uni-popup>
 
-    <!-- 分类选择器 -->
+    <!-- 分类选择器（分组列表，仅叶子/子分类可选） -->
     <uni-popup ref="categoryPopup" type="bottom">
       <view class="picker-content">
         <view class="picker-header">
           <text @click="showCategoryPicker = false">取消</text>
-          <text @click="confirmCategory">确定</text>
+          <text class="picker-title">选择支出分类</text>
+          <text class="picker-placeholder">确定</text>
         </view>
-        <picker-view
-          :value="categoryIndex"
-          @change="onCategoryChange"
-          class="picker-view"
-        >
-          <picker-view-column>
-            <view v-for="cat in expenseCategories" :key="cat.id" class="picker-item">
-              {{ cat.name }}
-            </view>
-          </picker-view-column>
-        </picker-view>
+        <CategoryTreePicker
+          :categories="expenseCategories"
+          :selected-id="selectedCategory?.id"
+          @pick="onPickCategory"
+        />
       </view>
     </uni-popup>
   </view>
@@ -121,6 +116,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { getBudgets, createBudget, updateBudget, deleteBudget, getCategories, getCategoryStatistics } from '@/api'
+import CategoryTreePicker from '@/components/CategoryTreePicker.vue'
 
 const currentYear = ref(new Date().getFullYear())
 const currentMonth = ref(new Date().getMonth() + 1)
@@ -130,7 +126,6 @@ const formPopup = ref<any>(null)
 const categoryPopup = ref<any>(null)
 const isEditing = ref(false)
 const editingId = ref<number | null>(null)
-const categoryIndex = ref(0)
 
 const showCategoryPicker = ref(false)
 const selectedCategory = ref<any>(null)
@@ -142,6 +137,23 @@ const form = ref({
 const monthStr = computed(
   () => `${currentYear.value}年${currentMonth.value}月`
 )
+
+// 第一个叶子，作为新建预算时的默认选中
+const firstLeaf = computed(() => {
+  const child = expenseCategories.value.find((c: any) => c.parent_id != null)
+  return child || expenseCategories.value[0] || null
+})
+
+// 表单项显示文本：带父分类前缀，如「家庭不固定支出 / 餐饮」
+const selectedCategoryText = computed(() => {
+  const c = selectedCategory.value
+  if (!c) return '请选择'
+  if (c.parent_id != null) {
+    const parent = expenseCategories.value.find((p: any) => p.id === c.parent_id)
+    return parent ? `${parent.name} / ${c.name}` : c.name
+  }
+  return c.name
+})
 
 const totalBudget = computed(() =>
   budgetList.value.reduce((sum, item) => sum + item.amount, 0)
@@ -219,31 +231,31 @@ const fetchData = async () => {
       (statsRes || []).map((s: any) => [s.category_id, s.amount])
     )
 
-    // 合并数据
-    budgetList.value = budgets.map((b: any) => ({
-      ...b,
-      spent: statsMap.get(b.category_id) || 0,
-      percent: b.amount > 0 ? ((statsMap.get(b.category_id) || 0) / b.amount) * 100 : 0,
-    }))
+    // 合并数据（金额统一转 number，避免后端 Decimal 字符串参与计算/拼接）
+    budgetList.value = budgets.map((b: any) => {
+      const amount = Number(b.amount) || 0
+      const spent = Number(statsMap.get(b.category_id)) || 0
+      return {
+        ...b,
+        amount,
+        spent,
+        percent: amount > 0 ? (spent / amount) * 100 : 0,
+      }
+    })
   } catch (error) {
     console.error('获取数据失败', error)
   }
 }
 
-const onCategoryChange = (e: any) => {
-  categoryIndex.value = e.detail.value[0]
-}
-
-const confirmCategory = () => {
-  selectedCategory.value = expenseCategories.value[categoryIndex.value]
+const onPickCategory = (cat: any) => {
+  selectedCategory.value = cat
   showCategoryPicker.value = false
 }
 
 const handleAdd = () => {
   isEditing.value = false
   editingId.value = null
-  categoryIndex.value = 0
-  selectedCategory.value = expenseCategories.value[0] || null
+  selectedCategory.value = firstLeaf.value
   form.value.amount = ''
   formPopup.value.open()
 }
@@ -251,12 +263,7 @@ const handleAdd = () => {
 const handleEdit = (item: any) => {
   isEditing.value = true
   editingId.value = item.id
-  selectedCategory.value = expenseCategories.value.find(
-    (c) => c.id === item.category_id
-  ) || null
-  categoryIndex.value = expenseCategories.value.findIndex(
-    (c) => c.id === item.category_id
-  ) || 0
+  selectedCategory.value = expenseCategories.value.find((c: any) => c.id === item.category_id) || null
   form.value.amount = item.amount?.toString() || ''
   formPopup.value.open()
 }
@@ -553,30 +560,26 @@ onMounted(() => {
 .picker-content {
   background: #fff;
   border-radius: 20rpx 20rpx 0 0;
-  padding-bottom: 50rpx;
+  padding-bottom: calc(50rpx + env(safe-area-inset-bottom));
 
   .picker-header {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     padding: 30rpx;
     border-bottom: 1px solid #eee;
 
     text {
       font-size: 28rpx;
-      &:last-child {
-        color: #1989fa;
-      }
     }
-  }
 
-  .picker-view {
-    height: 400rpx;
+    .picker-title {
+      font-weight: bold;
+      color: #333;
+    }
 
-    .picker-item {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      font-size: 28rpx;
+    .picker-placeholder {
+      visibility: hidden;
     }
   }
 }

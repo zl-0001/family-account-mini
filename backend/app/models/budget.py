@@ -12,10 +12,11 @@ class Budget(Base):
     family_id = Column(Integer, nullable=True)
     category_id = Column(Integer, nullable=True)
     amount = Column(Numeric(12, 2), nullable=False)
+    year = Column(Integer, nullable=False)
     month = Column(Integer, nullable=False)
     spent = Column(Numeric(12, 2), default=0)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     def __repr__(self):
-        return f"<Budget(id={self.id}, month={self.month}, amount={self.amount})>"
+        return f"<Budget(id={self.id}, year={self.year}, month={self.month}, amount={self.amount})>"

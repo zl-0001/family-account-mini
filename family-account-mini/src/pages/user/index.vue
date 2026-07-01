@@ -3,11 +3,11 @@
     <!-- 用户信息 -->
     <view class="user-info">
       <view class="avatar">
-        <text>{{ userStore.userInfo?.nickname?.[0] || userStore.userInfo?.username?.[0] || 'U' }}</text>
+        <text>{{ userInfo?.nickname?.[0] || userInfo?.username?.[0] || 'U' }}</text>
       </view>
       <view class="info">
-        <text class="nickname">{{ userStore.userInfo?.nickname || userStore.userInfo?.username || '用户' }}</text>
-        <text class="username">@{{ userStore.userInfo?.username }}</text>
+        <text class="nickname">{{ userInfo?.nickname || userInfo?.username || '用户' }}</text>
+        <text class="username">@{{ userInfo?.username }}</text>
       </view>
     </view>
 
@@ -16,13 +16,13 @@
       <view class="menu-item" @click="editNickname">
         <text class="menu-icon">👤</text>
         <text class="menu-text">昵称</text>
-        <text class="menu-val">{{ userStore.userInfo?.nickname || '未设置' }}</text>
+        <text class="menu-val">{{ userInfo?.nickname || '未设置' }}</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-item" @click="editPhone">
         <text class="menu-icon">📱</text>
         <text class="menu-text">手机号</text>
-        <text class="menu-val">{{ userStore.userInfo?.phone || '未绑定' }}</text>
+        <text class="menu-val">{{ userInfo?.phone || '未绑定' }}</text>
         <text class="menu-arrow">›</text>
       </view>
       <view class="menu-item" @click="goCategories">
@@ -48,24 +48,36 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { useUserStore } from '@/stores/user'
 import { getUserInfo, updateUserInfo } from '@/api'
 
 const userStore = useUserStore()
+// 独立顶层 ref：用 store 当前值初始化，刷新时显式赋值，确保模板响应式可靠更新
+const userInfo = ref<any>(userStore.userInfo.value)
+
+const refreshUserInfo = async () => {
+  try {
+    const res: any = await getUserInfo()
+    userStore.setUserInfo(res)
+    userInfo.value = res
+  } catch (e) {
+    console.error('刷新用户信息失败', e)
+  }
+}
 
 const editNickname = () => {
   uni.showModal({
     title: '设置昵称',
     editable: true,
     placeholderText: '请输入昵称',
-    content: userStore.userInfo?.nickname || '',
+    content: userInfo.value?.nickname || '',
     success: async (res) => {
       if (res.confirm && res.content) {
         try {
           await updateUserInfo({ nickname: res.content.trim() })
-          const userInfo: any = await getUserInfo()
-          userStore.setUserInfo(userInfo)
+          await refreshUserInfo()
           uni.showToast({ title: '修改成功', icon: 'success' })
         } catch (error: any) {
           uni.showToast({ title: error.message || '修改失败', icon: 'none' })
@@ -80,7 +92,7 @@ const editPhone = () => {
     title: '绑定手机号',
     editable: true,
     placeholderText: '请输入手机号',
-    content: userStore.userInfo?.phone || '',
+    content: userInfo.value?.phone || '',
     success: async (res) => {
       if (res.confirm && res.content) {
         const phone = res.content.trim()
@@ -90,8 +102,7 @@ const editPhone = () => {
         }
         try {
           await updateUserInfo({ phone })
-          const userInfo: any = await getUserInfo()
-          userStore.setUserInfo(userInfo)
+          await refreshUserInfo()
           uni.showToast({ title: '绑定成功', icon: 'success' })
         } catch (error: any) {
           uni.showToast({ title: error.message || '修改失败', icon: 'none' })
@@ -127,13 +138,8 @@ const handleLogout = () => {
 }
 
 onShow(() => {
-  // 刷新用户信息
   if (userStore.isLoggedIn()) {
-    getUserInfo()
-      .then((res: any) => {
-        userStore.setUserInfo(res)
-      })
-      .catch(console.error)
+    refreshUserInfo()
   }
 })
 </script>

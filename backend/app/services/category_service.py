@@ -65,18 +65,10 @@ class CategoryService:
         if not category:
             return None
 
-        if data.name is not None:
-            category.name = data.name
-        if data.parent_id is not None:
-            category.parent_id = data.parent_id
-        if data.icon is not None:
-            category.icon = data.icon
-        if data.color is not None:
-            category.color = data.color
-        if data.group is not None:
-            category.group = data.group
-        if hasattr(data, 'sort_order') and data.sort_order is not None:
-            category.sort_order = data.sort_order
+        update_data = data.model_dump(exclude_unset=True)
+
+        for field, value in update_data.items():
+            setattr(category, field, value)
 
         self.db.commit()
         self.db.refresh(category)

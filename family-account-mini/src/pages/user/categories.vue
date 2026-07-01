@@ -16,18 +16,44 @@
       >
         收入分类
       </view>
+      <view class="sort-btn" @click="toggleSortMode">
+        {{ sortMode ? '完成' : '排序' }}
+      </view>
     </view>
 
-    <!-- 分类列表 -->
-    <scroll-view class="category-list" scroll-y>
+    <!-- 排序模式 -->
+    <template v-if="sortMode">
+      <view class="sort-hint">长按拖动分类调整顺序</view>
+      <view class="sort-groups">
+        <block v-for="group in sortGroups" :key="group.key">
+          <view class="sort-group-title">{{ group.title }}</view>
+          <view
+            v-for="(item, i) in group.items"
+            :key="item.id"
+            class="sort-item"
+            :class="{ dragging: isDragging(group, i) }"
+            :style="getItemStyle(group, i)"
+            @touchstart="onTouchStart($event, group, i)"
+            @touchmove="onTouchMove"
+            @touchend="onTouchEnd"
+            @touchcancel="onTouchEnd"
+          >
+            <text class="drag-handle">≡</text>
+            <text class="sort-icon">{{ item.icon || '📁' }}</text>
+            <text class="sort-name">{{ item.name }}</text>
+          </view>
+        </block>
+      </view>
+    </template>
+
+    <!-- 正常模式 -->
+    <scroll-view v-else class="category-list" scroll-y>
       <block v-for="cat in categoryTree" :key="cat.id">
         <view class="category-item parent" @click="toggleExpand(cat)">
           <text class="cat-expand">{{ cat.expanded ? '▼' : '▶' }}</text>
           <text class="cat-icon">{{ cat.icon || '📁' }}</text>
           <text class="cat-name">{{ cat.name }}</text>
           <view class="cat-actions">
-            <text class="action-btn sort" @click.stop="moveCategory(cat, 'up')">↑</text>
-            <text class="action-btn sort" @click.stop="moveCategory(cat, 'down')">↓</text>
             <text class="action-btn" @click.stop="handleEdit(cat)">编辑</text>
             <text class="action-btn delete" @click.stop="handleDelete(cat)">删除</text>
           </view>
@@ -37,8 +63,6 @@
             <text class="cat-icon">{{ child.icon || '📁' }}</text>
             <text class="cat-name">{{ child.name }}</text>
             <view class="cat-actions">
-              <text class="action-btn sort" @click.stop="moveCategory(child, 'up')">↑</text>
-              <text class="action-btn sort" @click.stop="moveCategory(child, 'down')">↓</text>
               <text class="action-btn" @click.stop="handleEdit(child)">编辑</text>
               <text class="action-btn delete" @click.stop="handleDelete(child)">删除</text>
             </view>
@@ -48,8 +72,8 @@
       <view class="list-bottom-placeholder"></view>
     </scroll-view>
 
-    <!-- 添加按钮 -->
-    <view class="add-btn-wrapper">
+    <!-- 添加按钮（正常模式） -->
+    <view v-if="!sortMode" class="add-btn-wrapper">
       <button class="add-btn" @click="handleAdd">添加分类</button>
     </view>
 
@@ -150,6 +174,162 @@ const toggleExpand = (cat: any) => {
   expandState.value[cat.id] = !(expandState.value[cat.id] !== false)
 }
 
+// === 排序模式 ===
+const sortMode = ref(false)
+
+interface SortGroup {
+  key: string
+  title: string
+  parentId: number | null
+  items: any[]
+}
+
+const sortGroups = computed<SortGroup[]>(() => {
+  const list = categoryList.value
+  const roots = list.filter((c: any) => c.parent_id === null)
+  const groups: SortGroup[] = [
+    { key: 'root', title: '大项分类', parentId: null, items: roots },
+  ]
+  roots.forEach((r: any) => {
+    const children = list.filter((c: any) => c.parent_id === r.id)
+    if (children.length > 0) {
+      groups.push({
+        key: `child-${r.id}`,
+        title: `${r.icon || '📁'} ${r.name}`,
+        parentId: r.id,
+        items: children,
+      })
+    }
+  })
+  return groups
+})
+
+const ITEM_HEIGHT_RPX = 110
+const itemHeightPx = ref(55)
+
+const computeItemHeight = () => {
+  try {
+    const w = uni.getWindowInfo().windowWidth
+    itemHeightPx.value = (ITEM_HEIGHT_RPX * w) / 750
+  } catch {
+    try {
+      const w = uni.getSystemInfoSync().windowWidth
+      itemHeightPx.value = (ITEM_HEIGHT_RPX * w) / 750
+    } catch {}
+  }
+}
+
+const dragGroup = ref<SortGroup | null>(null)
+const dragIndex = ref(-1)
+const startY = ref(0)
+const moveY = ref(0)
+const longPressTimer = ref<any>(null)
+const scrollTimer = ref<any>(null)
+
+const isDragging = (group: SortGroup, index: number) =>
+  dragGroup.value?.key === group.key && dragIndex.value === index
+
+const toggleSortMode = () => {
+  if (sortMode.value) {
+    sortMode.value = false
+    resetDrag()
+  } else {
+    sortMode.value = true
+    computeItemHeight()
+  }
+}
+
+const resetDrag = () => {
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+  }
+  if (scrollTimer.value) {
+    clearInterval(scrollTimer.value)
+    scrollTimer.value = null
+  }
+  dragGroup.value = null
+  dragIndex.value = -1
+  moveY.value = 0
+}
+
+const onTouchStart = (e: any, group: SortGroup, index: number) => {
+  startY.value = e.touches[0].clientY
+  longPressTimer.value = setTimeout(() => {
+    dragGroup.value = group
+    dragIndex.value = index
+    uni.vibrateShort({ type: 'medium' }).catch(() => {})
+  }, 350)
+}
+
+const onTouchMove = (e: any) => {
+  if (longPressTimer.value && !dragGroup.value) {
+    clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+    return
+  }
+  if (!dragGroup.value || dragIndex.value === -1) return
+  moveY.value = e.touches[0].clientY - startY.value
+}
+
+const getItemStyle = (group: SortGroup, index: number) => {
+  if (!dragGroup.value || dragGroup.value.key !== group.key) return ''
+  const h = itemHeightPx.value
+  if (index === dragIndex.value) {
+    return `transform: translateY(${moveY.value}px); z-index: 100; box-shadow: 0 8rpx 24rpx rgba(0,0,0,0.15); opacity: 0.92;`
+  }
+  const steps = Math.round(moveY.value / h)
+  const newIdx = Math.max(0, Math.min(group.items.length - 1, dragIndex.value + steps))
+  const dragCenter = dragIndex.value * h + h / 2 + moveY.value
+  const itemCenter = index * h + h / 2
+  if (index >= Math.min(dragIndex.value, newIdx) && index <= Math.max(dragIndex.value, newIdx) && index !== dragIndex.value) {
+    if (dragIndex.value < newIdx && index > dragIndex.value && dragCenter > itemCenter) {
+      return `transform: translateY(-${h}px); transition: transform 0.2s;`
+    }
+    if (dragIndex.value > newIdx && index < dragIndex.value && dragCenter < itemCenter) {
+      return `transform: translateY(${h}px); transition: transform 0.2s;`
+    }
+  }
+  return 'transform: translateY(0); transition: transform 0.2s;'
+}
+
+const onTouchEnd = async () => {
+  if (longPressTimer.value) {
+    clearTimeout(longPressTimer.value)
+    longPressTimer.value = null
+  }
+  if (!dragGroup.value || dragIndex.value === -1) {
+    resetDrag()
+    return
+  }
+
+  const h = itemHeightPx.value
+  const steps = Math.round(moveY.value / h)
+  const items = dragGroup.value.items
+  const oldIdx = dragIndex.value
+  const newIdx = Math.max(0, Math.min(items.length - 1, oldIdx + steps))
+
+  const group = dragGroup.value
+  resetDrag()
+
+  if (newIdx !== oldIdx) {
+    const reordered = [...items]
+    const [moved] = reordered.splice(oldIdx, 1)
+    reordered.splice(newIdx, 0, moved)
+
+    try {
+      await reorderCategories(
+        reordered.map((c: any, i: number) => ({ id: c.id, sort_order: i }))
+      )
+      fetchCategories()
+      uni.showToast({ title: '排序成功', icon: 'success' })
+    } catch (error: any) {
+      uni.showToast({ title: error.message || '排序失败', icon: 'none' })
+    }
+  }
+}
+
+// === 分类 CRUD ===
 const fetchCategories = async () => {
   try {
     const res: any = await getCategories()
@@ -211,29 +391,6 @@ const handleSave = async () => {
   }
 }
 
-const moveCategory = async (cat: any, direction: 'up' | 'down') => {
-  const flat = categoryList.value
-  const sameLevel = flat.filter((c: any) =>
-    cat.parent_id === null ? c.parent_id === null : c.parent_id === cat.parent_id
-  )
-  const idx = sameLevel.findIndex((c: any) => c.id === cat.id)
-  const targetIdx = direction === 'up' ? idx - 1 : idx + 1
-  if (targetIdx < 0 || targetIdx >= sameLevel.length) return
-
-  const a = sameLevel[idx]
-  const b = sameLevel[targetIdx]
-
-  try {
-    await reorderCategories([
-      { id: a.id, sort_order: targetIdx },
-      { id: b.id, sort_order: idx },
-    ])
-    fetchCategories()
-  } catch (error: any) {
-    uni.showToast({ title: error.message || '排序失败', icon: 'none' })
-  }
-}
-
 const handleDelete = (cat: any) => {
   uni.showModal({
     title: '确认删除',
@@ -253,6 +410,7 @@ const handleDelete = (cat: any) => {
 }
 
 onMounted(() => {
+  computeItemHeight()
   fetchCategories()
 })
 </script>
@@ -271,6 +429,7 @@ onMounted(() => {
   display: flex;
   background: #fff;
   padding: 20rpx;
+  align-items: center;
 
   .tab-btn {
     flex: 1;
@@ -282,6 +441,65 @@ onMounted(() => {
     &.active {
       background: #1989fa;
       color: #fff;
+    }
+  }
+
+  .sort-btn {
+    padding: 20rpx 30rpx;
+    font-size: 28rpx;
+    color: #1989fa;
+    flex-shrink: 0;
+  }
+}
+
+.sort-hint {
+  padding: 20rpx 30rpx;
+  font-size: 24rpx;
+  color: #999;
+  text-align: center;
+}
+
+.sort-groups {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20rpx 20rpx;
+
+  .sort-group-title {
+    font-size: 24rpx;
+    color: #999;
+    padding: 20rpx 10rpx 10rpx;
+  }
+
+  .sort-item {
+    background: #fff;
+    border-radius: 10rpx;
+    padding: 30rpx;
+    margin-bottom: 10rpx;
+    display: flex;
+    align-items: center;
+    height: 100rpx;
+    box-sizing: border-box;
+
+    .drag-handle {
+      font-size: 40rpx;
+      color: #ccc;
+      margin-right: 20rpx;
+      width: 40rpx;
+    }
+
+    .sort-icon {
+      font-size: 36rpx;
+      margin-right: 20rpx;
+    }
+
+    .sort-name {
+      flex: 1;
+      font-size: 28rpx;
+      color: #333;
+    }
+
+    &.dragging {
+      background: #e8f4ff;
     }
   }
 }
@@ -330,11 +548,6 @@ onMounted(() => {
         font-size: 24rpx;
         color: #1989fa;
         margin-left: 20rpx;
-
-        &.sort {
-          color: #999;
-          font-size: 28rpx;
-        }
 
         &.delete {
           color: #ff4d4f;

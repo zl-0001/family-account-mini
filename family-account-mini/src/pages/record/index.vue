@@ -36,7 +36,7 @@
     <view class="form-item" @click="openCategoryPicker">
       <text class="item-label">分类</text>
       <view class="item-value">
-        <text>{{ selectedCategory?.name || '请选择' }}</text>
+        <text>{{ selectedCategoryText }}</text>
         <text class="arrow">›</text>
       </view>
     </view>
@@ -75,18 +75,19 @@
       保存
     </button>
 
-    <!-- 分类选择器 -->
+    <!-- 分类选择器（分组列表，仅叶子/子分类可选） -->
     <view class="modal-mask" v-if="showCategoryPicker" @click="showCategoryPicker = false">
       <view class="modal-content" @click.stop>
         <view class="modal-header">
           <text @click="showCategoryPicker = false">取消</text>
-          <text class="confirm" @click="confirmCategory">确定</text>
+          <text class="modal-title">选择分类</text>
+          <text class="modal-placeholder">确定</text>
         </view>
-        <picker-view :value="pickerCategoryValue" @change="onCategoryChange" class="modal-picker">
-          <picker-view-column>
-            <view v-for="cat in categories" :key="cat.id" class="picker-item">{{ cat.name }}</view>
-          </picker-view-column>
-        </picker-view>
+        <CategoryTreePicker
+          :categories="categories"
+          :selected-id="selectedCategory?.id"
+          @pick="onPickCategory"
+        />
       </view>
     </view>
 
@@ -126,6 +127,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getCategories, getAccounts, createRecord } from '@/api'
+import CategoryTreePicker from '@/components/CategoryTreePicker.vue'
 
 const activeType = ref<'expense' | 'income'>('expense')
 const loading = ref(false)
@@ -146,10 +148,8 @@ const showCategoryPicker = ref(false)
 const showAccountPicker = ref(false)
 const showDatePicker = ref(false)
 
-const categoryIndex = ref(0)
 const accountIndex = ref(0)
 const dateIndex = ref(0)
-const pickerCategoryValue = ref([0])
 const pickerAccountValue = ref([0])
 const pickerDateValue = ref([0])
 
@@ -163,8 +163,26 @@ const dateList = computed(() => {
   return dates
 })
 
-const onCategoryChange = (e: any) => {
-  categoryIndex.value = e.detail.value[0]
+// 第一个叶子分类，作为默认选中
+const firstLeaf = computed(() => {
+  const child = categories.value.find((c: any) => c.parent_id != null)
+  return child || categories.value[0] || null
+})
+
+// 表单项显示：带父分类前缀，如「家庭不固定支出 / 餐饮」
+const selectedCategoryText = computed(() => {
+  const c = selectedCategory.value
+  if (!c) return '请选择'
+  if (c.parent_id != null) {
+    const parent = categories.value.find((p: any) => p.id === c.parent_id)
+    return parent ? `${parent.name} / ${c.name}` : c.name
+  }
+  return c.name
+})
+
+const onPickCategory = (cat: any) => {
+  selectedCategory.value = cat
+  showCategoryPicker.value = false
 }
 
 const onAccountChange = (e: any) => {
@@ -173,11 +191,6 @@ const onAccountChange = (e: any) => {
 
 const onDateChange = (e: any) => {
   dateIndex.value = e.detail.value[0]
-}
-
-const confirmCategory = () => {
-  selectedCategory.value = categories.value[categoryIndex.value]
-  showCategoryPicker.value = false
 }
 
 const confirmAccount = () => {
@@ -193,7 +206,6 @@ const confirmDate = () => {
 const openCategoryPicker = () => {
   showAccountPicker.value = false
   showDatePicker.value = false
-  pickerCategoryValue.value = [categoryIndex.value]
   showCategoryPicker.value = true
 }
 
@@ -215,9 +227,7 @@ const fetchCategories = async () => {
   try {
     const res: any = await getCategories(activeType.value)
     categories.value = res || []
-    if (categories.value.length > 0) {
-      selectedCategory.value = categories.value[0]
-    }
+    selectedCategory.value = firstLeaf.value || null
   } catch (error) {
     console.error('获取分类失败', error)
   }
@@ -280,8 +290,6 @@ onShow(() => {
 })
 
 watch(activeType, () => {
-  selectedCategory.value = null
-  categoryIndex.value = 0
   fetchCategories()
   fetchAccounts()
 })
@@ -413,6 +421,7 @@ watch(activeType, () => {
   .modal-header {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     padding: 30rpx;
     border-bottom: 1px solid #eee;
 
@@ -422,6 +431,15 @@ watch(activeType, () => {
 
     .confirm {
       color: #1989fa;
+    }
+
+    .modal-title {
+      font-weight: bold;
+      color: #333;
+    }
+
+    .modal-placeholder {
+      visibility: hidden;
     }
   }
 

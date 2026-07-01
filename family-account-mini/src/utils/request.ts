@@ -1,5 +1,5 @@
 // 请求工具类 - 适配 UniApp
-const BASE_URL = 'https://family-account-mini.onrender.com/api/v1'
+const BASE_URL = 'http://192.168.1.61:8000/api/v1'
 
 interface RequestOptions {
   url: string

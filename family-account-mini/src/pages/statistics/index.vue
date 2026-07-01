@@ -157,45 +157,52 @@ const totalAmount = computed(() =>
   categoryStats.value.reduce((sum: number, item: any) => sum + parseFloat(toFixed(item.amount)), 0)
 )
 
-const drawDonut = () => {
+const drawDonut = (retry = 0) => {
   const total = totalAmount.value
   if (total === 0) return
 
   const dpr = getDpr()
-  const query = uni.createSelectorQuery()
-  query.select('#donutChart').fields({ node: true, size: true }).exec((res: any) => {
-    if (!res || !res[0] || !res[0].node) return
-    const canvas = res[0].node
-    const ctx = canvas.getContext('2d')
-    const width = res[0].width
-    const height = res[0].height
-    canvas.width = width * dpr
-    canvas.height = height * dpr
-    ctx.scale(dpr, dpr)
+  uni.createSelectorQuery()
+    .select('#donutChart')
+    // @ts-ignore uni.fields 的 callback 在微信小程序不触发，必须用 .exec(cb)
+    .fields({ node: true, size: true })
+    .exec((res: any) => {
+      if (!res || !res[0] || !res[0].node) {
+        // canvas 2D 节点可能还在初始化，延迟重试
+        if (retry < 8) setTimeout(() => drawDonut(retry + 1), 80)
+        return
+      }
+      const canvas = res[0].node
+      const ctx = canvas.getContext('2d')
+      const width = res[0].width
+      const height = res[0].height
+      canvas.width = width * dpr
+      canvas.height = height * dpr
+      ctx.scale(dpr, dpr)
 
-    const centerX = width / 2
-    const centerY = height / 2
-    const outerR = Math.min(centerX, centerY) - 2
-    const innerR = outerR * 0.55
+      const centerX = width / 2
+      const centerY = height / 2
+      const outerR = Math.min(centerX, centerY) - 2
+      const innerR = outerR * 0.55
 
-    ctx.clearRect(0, 0, width, height)
+      ctx.clearRect(0, 0, width, height)
 
-    let startAngle = -Math.PI / 2
-    categoryStats.value.forEach((item: any, i: number) => {
-      const percent = parseFloat(toFixed(item.amount)) / total
-      const sweepAngle = percent * Math.PI * 2
-      const endAngle = startAngle + sweepAngle
+      let startAngle = -Math.PI / 2
+      categoryStats.value.forEach((item: any, i: number) => {
+        const percent = parseFloat(toFixed(item.amount)) / total
+        const sweepAngle = percent * Math.PI * 2
+        const endAngle = startAngle + sweepAngle
 
-      ctx.beginPath()
-      ctx.arc(centerX, centerY, outerR, startAngle, endAngle)
-      ctx.arc(centerX, centerY, innerR, endAngle, startAngle, true)
-      ctx.closePath()
-      ctx.fillStyle = chartColors[i % chartColors.length]
-      ctx.fill()
+        ctx.beginPath()
+        ctx.arc(centerX, centerY, outerR, startAngle, endAngle)
+        ctx.arc(centerX, centerY, innerR, endAngle, startAngle, true)
+        ctx.closePath()
+        ctx.fillStyle = chartColors[i % chartColors.length]
+        ctx.fill()
 
-      startAngle = endAngle
+        startAngle = endAngle
+      })
     })
-  })
 }
 
 const barWidth = (item: any) => {
@@ -249,7 +256,7 @@ const fetchCategoryStats = async () => {
       selectedParentId.value !== null ? selectedParentId.value : undefined
     )
     categoryStats.value = categoryRes || []
-    setTimeout(() => drawDonut(), 150)
+    nextTick(() => drawDonut())
   } catch (error) {
     console.error('获取分类统计失败', error)
   }
