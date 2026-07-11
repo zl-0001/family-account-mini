@@ -122,8 +122,8 @@ class StatisticsService:
             "monthly_data": monthly_data
         }
 
-    def get_category_stats(self, user_id: int, year: int, month: int, record_type: str, parent_id: int = None) -> List[dict]:
-        """获取分类统计"""
+    def get_category_stats(self, user_id: int, year: int, month: int, record_type: str, parent_ids: List[int] = None) -> List[dict]:
+        """获取分类统计。parent_ids 为父分类 id 列表（支持多选），留空=全部"""
         start_date = date(year, month, 1)
         _, last_day = calendar.monthrange(year, month)
         end_date = date(year, month, last_day)
@@ -139,12 +139,11 @@ class StatisticsService:
             Record.record_date <= end_date
         )
 
-        if parent_id is not None:
-            child_ids = [c.id for c in self.db.query(Category).filter(Category.parent_id == parent_id).all()]
-            if child_ids:
-                query = query.filter(Record.category_id.in_(child_ids))
-            else:
-                query = query.filter(Record.category_id == parent_id)
+        if parent_ids:
+            # 选中父分类的子分类 id 并集，再并入父分类本身（兼容无子的叶子父）
+            child_ids = [c.id for c in self.db.query(Category).filter(Category.parent_id.in_(parent_ids)).all()]
+            effective_ids = list(set(child_ids + parent_ids))
+            query = query.filter(Record.category_id.in_(effective_ids))
 
         results = query.group_by(Record.category_id).all()
         

@@ -65,13 +65,18 @@ def get_category_statistics(
     year: int,
     month: int,
     record_type: str = "expense",
-    parent_id: int = None,
+    parent_ids: str = None,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """获取分类统计数据"""
+    """获取分类统计数据。parent_ids 为逗号分隔的父分类 id（支持多选），留空=全部"""
+    ids = None
+    if parent_ids:
+        ids = [int(x) for x in parent_ids.split(',') if x.strip().isdigit()]
+        if not ids:
+            ids = None
     service = StatisticsService(db)
-    return service.get_category_stats(current_user.id, year, month, record_type, parent_id)
+    return service.get_category_stats(current_user.id, year, month, record_type, ids)
 
 
 @router.get("/trend")

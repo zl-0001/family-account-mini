@@ -43,32 +43,16 @@
       </view>
     </view>
 
-    <!-- 分类大项筛选 -->
-    <scroll-view class="filter-scroll" scroll-x v-if="parentCategories.length > 0">
-      <view class="filter-list">
-        <view
-          class="filter-tag"
-          :class="{ active: selectedParentId === null }"
-          @click="selectParent(null)"
-        >
-          全部
-        </view>
-        <view
-          class="filter-tag"
-          :class="{ active: selectedParentId === cat.id }"
-          v-for="cat in parentCategories"
-          :key="cat.id"
-          @click="selectParent(cat.id)"
-        >
-          {{ cat.icon }} {{ cat.name }}
-        </view>
-      </view>
-    </scroll-view>
+    <!-- 分类大项筛选（多选） -->
+    <view class="filter-bar" v-if="parentCategories.length > 0" @click="showFilterPanel = true">
+      <text class="filter-cur">{{ filterLabel }}</text>
+      <text class="filter-arrow">▼</text>
+    </view>
 
     <template v-if="categoryStats.length > 0">
       <!-- 环形图 -->
       <view class="chart-card">
-        <view class="donut-wrap">
+        <view class="donut-wrap" v-if="!showFilterPanel">
           <canvas
             type="2d"
             id="donutChart"
@@ -111,6 +95,29 @@
     <view class="empty-tip" v-else>
       <text>暂无{{ activeTab === 'expense' ? '支出' : '收入' }}记录</text>
     </view>
+
+    <!-- 分类大项多选面板 -->
+    <view class="filter-mask" v-if="showFilterPanel" @click="showFilterPanel = false">
+      <view class="filter-panel" @click.stop>
+        <view class="filter-panel-header">
+          <text @click="resetFilter">重置</text>
+          <text class="filter-panel-title">选择分类大项</text>
+          <text class="filter-panel-confirm" @click="confirmFilter">确定</text>
+        </view>
+        <scroll-view scroll-y class="filter-panel-body">
+          <view
+            class="filter-option"
+            v-for="cat in parentCategories"
+            :key="cat.id"
+            @click="toggleParent(cat.id)"
+          >
+            <text class="filter-option-icon">{{ cat.icon || '📁' }}</text>
+            <text class="filter-option-name">{{ cat.name }}</text>
+            <text class="filter-option-check" :class="{ checked: selectedParentIds.includes(cat.id) }">{{ selectedParentIds.includes(cat.id) ? '✓' : '' }}</text>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
   </view>
 </template>
 
@@ -129,7 +136,8 @@ const getDpr = () => {
 const currentYear = ref(new Date().getFullYear())
 const currentMonth = ref(new Date().getMonth() + 1)
 const activeTab = ref<'expense' | 'income'>('expense')
-const selectedParentId = ref<number | null>(null)
+const selectedParentIds = ref<number[]>([])
+const showFilterPanel = ref(false)
 const allCategories = ref<any[]>([])
 
 const chartColors = [
@@ -147,6 +155,30 @@ const categoryStats = ref<any[]>([])
 const parentCategories = computed(() =>
   allCategories.value.filter((c: any) => c.type === activeTab.value && c.parent_id === null)
 )
+
+// 筛选条显示文本：空或全选 → "全部分类"，否则列出名称（超过 2 个显示数量）
+const filterLabel = computed(() => {
+  const sel = selectedParentIds.value
+  if (sel.length === 0 || sel.length === parentCategories.value.length) return '全部分类'
+  const names = sel
+    .map((id) => parentCategories.value.find((p: any) => p.id === id))
+    .filter(Boolean)
+    .map((p: any) => p.name) as string[]
+  return names.length <= 2 ? names.join('、') : `已选 ${names.length} 项`
+})
+
+const toggleParent = (id: number) => {
+  const i = selectedParentIds.value.indexOf(id)
+  if (i >= 0) selectedParentIds.value.splice(i, 1)
+  else selectedParentIds.value.push(id)
+}
+const resetFilter = () => {
+  selectedParentIds.value = []
+}
+const confirmFilter = () => {
+  showFilterPanel.value = false
+  fetchCategoryStats()
+}
 
 const toFixed = (val: number | string) => {
   if (typeof val === 'string') val = parseFloat(val) || 0
@@ -213,11 +245,6 @@ const barWidth = (item: any) => {
   return (parseFloat(toFixed(item.amount)) / maxAmount) * 100
 }
 
-const selectParent = (id: number | null) => {
-  selectedParentId.value = id
-  fetchCategoryStats()
-}
-
 const prevMonth = () => {
   if (currentMonth.value === 1) {
     currentMonth.value = 12
@@ -253,7 +280,7 @@ const fetchCategoryStats = async () => {
       currentYear.value,
       currentMonth.value,
       activeTab.value,
-      selectedParentId.value !== null ? selectedParentId.value : undefined
+      selectedParentIds.value.length ? selectedParentIds.value : undefined
     )
     categoryStats.value = categoryRes || []
     nextTick(() => drawDonut())
@@ -278,8 +305,13 @@ onShow(() => {
 })
 
 watch(activeTab, () => {
-  selectedParentId.value = null
+  selectedParentIds.value = []
   fetchCategoryStats()
+})
+
+watch(showFilterPanel, (val) => {
+  // 面板关闭后重画环形图：canvas 是原生组件层级高，弹出面板时先隐藏避免穿透
+  if (!val) nextTick(() => drawDonut())
 })
 </script>
 
@@ -337,30 +369,61 @@ watch(activeTab, () => {
   }
 }
 
-.filter-scroll {
+.filter-bar {
   background: #fff;
   margin: 10rpx 20rpx 0;
   border-radius: 10rpx;
-  white-space: nowrap;
+  padding: 22rpx 30rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  .filter-cur { font-size: 26rpx; color: #1989fa; }
+  .filter-arrow { margin-left: 10rpx; font-size: 20rpx; color: #1989fa; }
 }
 
-.filter-list {
-  display: inline-flex;
-  padding: 16rpx 10rpx;
+.filter-mask {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
 
-  .filter-tag {
-    display: inline-block;
-    padding: 10rpx 24rpx;
-    margin: 0 8rpx;
-    font-size: 24rpx;
-    color: #666;
-    background: #f5f5f5;
-    border-radius: 30rpx;
-    white-space: nowrap;
+.filter-panel {
+  background: #fff;
+  border-radius: 20rpx 20rpx 0 0;
+  padding-bottom: calc(40rpx + env(safe-area-inset-bottom));
 
-    &.active {
-      background: #1989fa;
-      color: #fff;
+  .filter-panel-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 28rpx 30rpx;
+    border-bottom: 1rpx solid #eee;
+
+    text { font-size: 28rpx; color: #666; }
+    .filter-panel-title { font-weight: bold; color: #333; }
+    .filter-panel-confirm { color: #1989fa; }
+  }
+
+  .filter-panel-body { max-height: 60vh; }
+
+  .filter-option {
+    display: flex;
+    align-items: center;
+    padding: 26rpx 30rpx;
+    border-bottom: 1rpx solid #f5f5f5;
+
+    .filter-option-icon { font-size: 34rpx; margin-right: 16rpx; }
+    .filter-option-name { flex: 1; font-size: 28rpx; color: #333; }
+    .filter-option-check {
+      width: 40rpx; height: 40rpx; line-height: 40rpx; text-align: center;
+      border-radius: 20rpx; border: 1rpx solid #ccc; color: transparent;
+      font-size: 28rpx;
+      &.checked { background: #1989fa; border-color: #1989fa; color: #fff; }
     }
   }
 }
