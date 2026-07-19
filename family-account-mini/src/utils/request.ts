@@ -40,7 +40,11 @@ export const request = async <T = any>(options: RequestOptions): Promise<T> => {
       uni.reLaunch({ url: '/pages/login/index' })
       throw new Error('请重新登录')
     } else {
-      const errorMsg = (response.data as any)?.detail || '请求失败'
+      const data = response.data as any
+      let errorMsg = '请求失败'
+      if (typeof data?.detail === 'string') errorMsg = data.detail
+      else if (Array.isArray(data?.detail)) errorMsg = data.detail.map((e: any) => e.msg).filter(Boolean).join('；')
+      else if (data?.message) errorMsg = data.message
       throw new Error(errorMsg)
     }
   } catch (error: any) {

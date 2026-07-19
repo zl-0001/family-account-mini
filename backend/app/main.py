@@ -1,8 +1,10 @@
 """
 家庭记账应用 - 后端入口文件
 """
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+import logging
 from app.core.config import settings
 from app.core.database import init_db
 from app.api.v1 import auth, records, categories, accounts, statistics, budgets, families, investments
@@ -15,6 +17,24 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc"
 )
+
+logging.basicConfig(level=logging.INFO)
+
+
+# 全局异常处理：记录日志；DEBUG 返回详情方便排查，生产环境只返回友好提示
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    logging.exception(f"未捕获异常 {request.method} {request.url.path}: {exc}")
+    if settings.DEBUG:
+        import traceback
+        return JSONResponse(
+            status_code=500,
+            content={"detail": str(exc), "traceback": traceback.format_exc()},
+        )
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "服务器内部错误，请稍后重试"},
+    )
 
 # CORS配置 - 允许前端跨域访问
 app.add_middleware(

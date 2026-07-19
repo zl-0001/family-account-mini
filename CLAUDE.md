@@ -182,3 +182,8 @@ MonthlyStatistics 响应：`{income, expense, balance, income_trend, expense_tre
 | `WEIXIN_APPID` / `WEIXIN_APPSECRET` | 微信小程序凭证 | 空 |
 
 需求说明文档见 `docs/requirement.md`。
+
+## Git 约定
+
+- 分支：`main`（主）/ `develop`（开发）/ `feature/*`（功能）/ `hotfix/*`（紧急修复）
+- 提交格式：`feat:` / `fix:` / `docs:` / `style:` / `refactor:` / `test:` / `chore:`
