@@ -53,7 +53,7 @@
     <view class="section">
       <view class="section-header">
         <text class="section-title">最近记录</text>
-        <text class="more" @click="goRecord">查看全部</text>
+        <text class="more" @click="goRecords">查看全部</text>
       </view>
       <view class="record-list" v-if="recentRecords.length > 0">
         <view class="record-item" v-for="item in recentRecords" :key="item.id">
@@ -143,6 +143,10 @@ const fetchData = async () => {
 
 const goRecord = () => {
   uni.switchTab({ url: '/pages/record/index' })
+}
+
+const goRecords = () => {
+  uni.navigateTo({ url: '/pages/records/index' })
 }
 
 onShow(() => {

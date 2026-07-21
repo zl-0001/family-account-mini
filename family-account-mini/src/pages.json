@@ -55,6 +55,24 @@
       "style": {
         "navigationBarTitleText": "预算管理"
       }
+    },
+    {
+      "path": "pages/records/index",
+      "style": {
+        "navigationBarTitleText": "收支记录"
+      }
+    },
+    {
+      "path": "pages/record/edit",
+      "style": {
+        "navigationBarTitleText": "编辑记录"
+      }
+    },
+    {
+      "path": "pages/family/index",
+      "style": {
+        "navigationBarTitleText": "家庭管理"
+      }
     }
   ],
   "globalStyle": {

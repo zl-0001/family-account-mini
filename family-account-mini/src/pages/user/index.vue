@@ -40,6 +40,11 @@
         <text class="menu-text">预算管理</text>
         <text class="menu-arrow">›</text>
       </view>
+      <view class="menu-item" @click="goFamily">
+        <text class="menu-icon">👨‍👩‍👧</text>
+        <text class="menu-text">家庭管理</text>
+        <text class="menu-arrow">›</text>
+      </view>
     </view>
 
     <!-- 退出登录 -->
@@ -122,6 +127,10 @@ const goAccounts = () => {
 
 const goBudget = () => {
   uni.navigateTo({ url: '/pages/user/budget' })
+}
+
+const goFamily = () => {
+  uni.navigateTo({ url: '/pages/family/index' })
 }
 
 const handleLogout = () => {

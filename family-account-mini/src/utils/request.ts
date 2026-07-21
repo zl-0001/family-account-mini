@@ -6,6 +6,8 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   data?: any
   header?: Record<string, string>
+  // 静默请求：不弹「加载中」遮罩（用于后台刷新、分页加载等）
+  silent?: boolean
 }
 
 interface Response<T = any> {
@@ -13,8 +15,25 @@ interface Response<T = any> {
   statusCode: number
 }
 
+// 全局 loading 计数器：并发请求只弹一个 loading，最后一个完成才关
+let activeLoadingCount = 0
+const showLoading = () => {
+  activeLoadingCount++
+  if (activeLoadingCount === 1) {
+    uni.showLoading({ title: '加载中', mask: true })
+  }
+}
+const hideLoading = () => {
+  if (activeLoadingCount > 0) activeLoadingCount--
+  if (activeLoadingCount === 0) {
+    uni.hideLoading()
+  }
+}
+
 export const request = async <T = any>(options: RequestOptions): Promise<T> => {
-  const { url, method = 'GET', data, header = {} } = options
+  const { url, method = 'GET', data, header = {}, silent = false } = options
+
+  if (!silent) showLoading()
 
   // 获取 token
   const token = uni.getStorageSync('token')
@@ -40,11 +59,11 @@ export const request = async <T = any>(options: RequestOptions): Promise<T> => {
       uni.reLaunch({ url: '/pages/login/index' })
       throw new Error('请重新登录')
     } else {
-      const data = response.data as any
+      const d = response.data as any
       let errorMsg = '请求失败'
-      if (typeof data?.detail === 'string') errorMsg = data.detail
-      else if (Array.isArray(data?.detail)) errorMsg = data.detail.map((e: any) => e.msg).filter(Boolean).join('；')
-      else if (data?.message) errorMsg = data.message
+      if (typeof d?.detail === 'string') errorMsg = d.detail
+      else if (Array.isArray(d?.detail)) errorMsg = d.detail.map((e: any) => e.msg).filter(Boolean).join('；')
+      else if (d?.message) errorMsg = d.message
       throw new Error(errorMsg)
     }
   } catch (error: any) {
@@ -53,36 +72,42 @@ export const request = async <T = any>(options: RequestOptions): Promise<T> => {
       icon: 'none'
     })
     throw error
+  } finally {
+    if (!silent) hideLoading()
   }
 }
 
-export const get = <T = any>(url: string, params?: any): Promise<T> => {
+export const get = <T = any>(url: string, params?: any, silent?: boolean): Promise<T> => {
   return request<T>({
     url,
     method: 'GET',
     data: params,
+    silent,
   })
 }
 
-export const post = <T = any>(url: string, data?: any): Promise<T> => {
+export const post = <T = any>(url: string, data?: any, silent?: boolean): Promise<T> => {
   return request<T>({
     url,
     method: 'POST',
     data,
+    silent,
   })
 }
 
-export const put = <T = any>(url: string, data?: any): Promise<T> => {
+export const put = <T = any>(url: string, data?: any, silent?: boolean): Promise<T> => {
   return request<T>({
     url,
     method: 'PUT',
     data,
+    silent,
   })
 }
 
-export const del = <T = any>(url: string): Promise<T> => {
+export const del = <T = any>(url: string, silent?: boolean): Promise<T> => {
   return request<T>({
     url,
     method: 'DELETE',
+    silent,
   })
 }

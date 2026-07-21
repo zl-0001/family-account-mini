@@ -70,7 +70,11 @@ export const getRecords = (params?: {
   end_date?: string
   record_type?: string
   category_id?: number
-}) => get('/records', params)
+  skip?: number
+  limit?: number
+}, silent?: boolean) => get('/records', params, silent)
+
+export const getRecordDetail = (id: number) => get(`/records/${id}`)
 
 export const getFixedRecords = () => get('/records/fixed')
 
@@ -121,3 +125,11 @@ export const updateBudget = (id: number, data: any) =>
   put(`/budgets/${id}`, data)
 
 export const deleteBudget = (id: number) => del(`/budgets/${id}`)
+
+// 家庭相关
+export const createFamily = (name: string) => post('/families', { name })
+export const getMyFamily = () => get('/families/me', undefined, true)
+export const joinFamily = (invite_code: string) => post('/families/join', { invite_code })
+export const regenerateInviteCode = () => post('/families/invite-code')
+export const getFamilyMembers = () => get('/families/members', undefined, true)
+export const removeFamilyMember = (memberId: number) => del(`/families/members/${memberId}`)

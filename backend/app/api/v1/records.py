@@ -29,6 +29,10 @@ class RecordUpdate(BaseModel):
     amount: Optional[Decimal] = None
     remark: Optional[str] = None
     is_fixed: Optional[bool] = None
+    category_id: Optional[int] = None
+    account_id: Optional[int] = None
+    type: Optional[str] = None
+    record_date: Optional[str] = None
 
 
 class RecordResponse(BaseModel):
@@ -87,12 +91,13 @@ def get_records(
     end_date: Optional[str] = None,
     record_type: Optional[str] = None,
     category_id: Optional[int] = None,
+    user_id: Optional[int] = None,
     skip: int = 0,
     limit: int = 20,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """获取记账记录列表"""
+    """获取记账记录列表（默认合并家庭；user_id 指定按某成员筛）"""
     service = RecordService(db)
     return service.get_list(
         user_id=current_user.id,
@@ -101,7 +106,8 @@ def get_records(
         record_type=record_type,
         category_id=category_id,
         skip=skip,
-        limit=limit
+        limit=limit,
+        filter_user_id=user_id
     )
 
 
@@ -125,6 +131,20 @@ def get_fixed_records(
     """获取固定收支记录"""
     service = RecordService(db)
     return service.get_fixed_records(current_user.id)
+
+
+@router.get("/{record_id}", response_model=RecordResponse)
+def get_record(
+    record_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """获取单条记录（仅本人）"""
+    service = RecordService(db)
+    result = service.get_by_id(record_id, current_user.id)
+    if not result:
+        raise HTTPException(status_code=404, detail="记录不存在")
+    return result
 
 
 @router.put("/{record_id}", response_model=RecordResponse)

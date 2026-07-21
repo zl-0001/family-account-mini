@@ -71,7 +71,7 @@
     </view>
 
     <!-- 保存按钮 -->
-    <button class="save-btn" type="primary" @click="handleSave" :loading="loading">
+    <button class="save-btn" type="primary" @click="handleSave" :loading="loading" :disabled="loading">
       保存
     </button>
 
@@ -246,6 +246,7 @@ const fetchAccounts = async () => {
 }
 
 const handleSave = async () => {
+  if (loading.value) return
   if (!form.value.amount || parseFloat(form.value.amount) <= 0) {
     uni.showToast({ title: '请输入有效金额', icon: 'none' })
     return

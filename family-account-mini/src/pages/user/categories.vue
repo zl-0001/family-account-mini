@@ -24,7 +24,7 @@
     <!-- 排序模式 -->
     <template v-if="sortMode">
       <view class="sort-hint">长按拖动分类调整顺序</view>
-      <view class="sort-groups">
+      <scroll-view class="sort-groups" :scroll-y="!isAnyDragging">
         <block v-for="group in sortGroups" :key="group.key">
           <view class="sort-group-title">{{ group.title }}</view>
           <view
@@ -43,7 +43,7 @@
             <text class="sort-name">{{ item.name }}</text>
           </view>
         </block>
-      </view>
+      </scroll-view>
     </template>
 
     <!-- 正常模式 -->
@@ -106,7 +106,7 @@
               </view>
             </picker>
           </view>
-          <button class="save-btn" type="primary" @click="handleSave">
+          <button class="save-btn" type="primary" :loading="saving" :disabled="saving" @click="handleSave">
             保存
           </button>
         </view>
@@ -176,6 +176,9 @@ const toggleExpand = (cat: any) => {
 
 // === 排序模式 ===
 const sortMode = ref(false)
+const saving = ref(false)
+// 拖动进行中时锁定 sort-groups 的滚动，避免拖动与页面滚动冲突
+const isAnyDragging = computed(() => dragGroup.value !== null)
 
 interface SortGroup {
   key: string
@@ -363,11 +366,13 @@ const onParentChange = (e: any) => {
 }
 
 const handleSave = async () => {
+  if (saving.value) return
   if (!form.value.name) {
     uni.showToast({ title: '请输入名称', icon: 'none' })
     return
   }
 
+  saving.value = true
   try {
     if (isEditing.value && editingId.value) {
       await updateCategory(editingId.value, {
@@ -388,6 +393,8 @@ const handleSave = async () => {
     fetchCategories()
   } catch (error: any) {
     uni.showToast({ title: error.message || '保存失败', icon: 'none' })
+  } finally {
+    saving.value = false
   }
 }
 
@@ -461,7 +468,7 @@ onMounted(() => {
 
 .sort-groups {
   flex: 1;
-  overflow-y: auto;
+  height: 0;
   padding: 0 20rpx 20rpx;
 
   .sort-group-title {

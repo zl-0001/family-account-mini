@@ -80,7 +80,7 @@
             <text class="label">预算金额</text>
             <input v-model="form.amount" type="digit" placeholder="请输入预算金额" class="input" />
           </view>
-          <button class="save-btn" type="primary" @click="handleSave">
+          <button class="save-btn" type="primary" :loading="saving" :disabled="saving" @click="handleSave">
             保存
           </button>
           <button
@@ -129,6 +129,7 @@ const editingId = ref<number | null>(null)
 
 const showCategoryPicker = ref(false)
 const selectedCategory = ref<any>(null)
+const saving = ref(false)
 
 const form = ref({
   amount: '',
@@ -269,6 +270,7 @@ const handleEdit = (item: any) => {
 }
 
 const handleSave = async () => {
+  if (saving.value) return
   if (!selectedCategory.value) {
     uni.showToast({ title: '请选择分类', icon: 'none' })
     return
@@ -278,6 +280,7 @@ const handleSave = async () => {
     return
   }
 
+  saving.value = true
   try {
     const data = {
       category_id: selectedCategory.value.id,
@@ -295,6 +298,8 @@ const handleSave = async () => {
     fetchData()
   } catch (error: any) {
     uni.showToast({ title: error.message || '保存失败', icon: 'none' })
+  } finally {
+    saving.value = false
   }
 }
 

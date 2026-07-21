@@ -21,6 +21,7 @@ class UserResponse(BaseModel):
     phone: Optional[str]
     email: Optional[str]
     role: str
+    family_id: Optional[int]
     created_at: datetime
 
     class Config:

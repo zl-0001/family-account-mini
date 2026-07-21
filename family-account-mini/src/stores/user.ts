@@ -6,6 +6,7 @@ interface UserInfo {
   nickname: string
   avatar?: string
   role: string
+  family_id?: number | null
 }
 
 const userInfo = ref<UserInfo | null>(null)

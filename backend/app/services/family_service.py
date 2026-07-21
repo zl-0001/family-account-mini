@@ -129,3 +129,13 @@ class FamilyService:
         member.role = "member"
         self.db.commit()
         return True
+
+
+def get_family_user_ids(db: Session, user_id: int) -> list:
+    """获取用户所在家庭的所有成员 id（含自己）；无家庭则返回 [user_id]。
+    用于把"按个人查询"升级为"按家庭合并查询"。"""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user or not user.family_id:
+        return [user_id]
+    members = db.query(User).filter(User.family_id == user.family_id).all()
+    return [m.id for m in members] if members else [user_id]

@@ -1,10 +1,11 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.models import Record, Category, Account
+from app.models import Record, Category, Account, User
 from typing import List, Optional
 from datetime import date, datetime
 from decimal import Decimal
 import calendar
+from app.services.family_service import get_family_user_ids
 
 
 class RecordService:
@@ -31,8 +32,13 @@ class RecordService:
         else:
             record_date_obj = record_data.record_date
 
+        # 记录所属家庭（用于家庭合并查询）
+        user = self.db.query(User).filter(User.id == user_id).first()
+        family_id = user.family_id if user else None
+
         record = Record(
             user_id=user_id,
+            family_id=family_id,
             account_id=record_data.account_id,
             category_id=record_data.category_id,
             type=record_data.type,
@@ -54,7 +60,7 @@ class RecordService:
         return record
 
     def update(self, record_id: int, data, user_id: int) -> Optional[Record]:
-        """更新记账记录"""
+        """更新记账记录（仅本人）"""
         record = self.db.query(Record).filter(
             Record.id == record_id,
             Record.user_id == user_id
@@ -73,6 +79,11 @@ class RecordService:
             record.remark = data.remark
         if hasattr(data, 'is_fixed') and data.is_fixed is not None:
             record.is_fixed = data.is_fixed
+        if getattr(data, 'category_id', None) is not None:
+            record.category_id = data.category_id
+        if getattr(data, 'record_date', None) is not None:
+            rd = data.record_date
+            record.record_date = datetime.strptime(rd, '%Y-%m-%d').date() if isinstance(rd, str) else rd
 
         # 恢复旧账户余额
         if old_type != "investment":
@@ -97,7 +108,7 @@ class RecordService:
         return record
 
     def delete(self, record_id: int, user_id: int) -> bool:
-        """删除记账记录"""
+        """删除记账记录（仅本人）"""
         record = self.db.query(Record).filter(
             Record.id == record_id,
             Record.user_id == user_id
@@ -112,6 +123,13 @@ class RecordService:
         self.db.commit()
         return True
 
+    def get_by_id(self, record_id: int, user_id: int) -> Optional[Record]:
+        """获取单条记录（仅本人可查详情用于编辑）"""
+        return self.db.query(Record).filter(
+            Record.id == record_id,
+            Record.user_id == user_id
+        ).first()
+
     def get_list(
         self,
         user_id: int,
@@ -120,11 +138,13 @@ class RecordService:
         record_type: Optional[str] = None,
         category_id: Optional[int] = None,
         skip: int = 0,
-        limit: int = 20
+        limit: int = 20,
+        filter_user_id: Optional[int] = None
     ) -> List[Record]:
-        """获取记账记录列表"""
-        query = self.db.query(Record).filter(Record.user_id == user_id)
-        
+        """获取记账记录列表（默认合并家庭；filter_user_id 指定按某成员筛）"""
+        target_ids = [filter_user_id] if filter_user_id else get_family_user_ids(self.db, user_id)
+        query = self.db.query(Record).filter(Record.user_id.in_(target_ids))
+
         if start_date:
             query = query.filter(Record.record_date >= start_date)
         if end_date:
@@ -133,56 +153,57 @@ class RecordService:
             query = query.filter(Record.type == record_type)
         if category_id:
             query = query.filter(Record.category_id == category_id)
-        
+
         return query.order_by(Record.record_date.desc()).offset(skip).limit(limit).all()
 
     def get_monthly_stats(self, user_id: int, year: int, month: int) -> dict:
-        """获取月度统计"""
+        """获取月度统计（合并家庭）"""
+        user_ids = get_family_user_ids(self.db, user_id)
         # 计算月份范围
         start_date = date(year, month, 1)
         _, last_day = calendar.monthrange(year, month)
         end_date = date(year, month, last_day)
-        
+
         # 查询本月收入
         income = self.db.query(func.sum(Record.amount)).filter(
-            Record.user_id == user_id,
+            Record.user_id.in_(user_ids),
             Record.type == "income",
             Record.record_date >= start_date,
             Record.record_date <= end_date
         ).scalar() or Decimal("0")
-        
+
         # 查询本月支出
         expense = self.db.query(func.sum(Record.amount)).filter(
-            Record.user_id == user_id,
+            Record.user_id.in_(user_ids),
             Record.type == "expense",
             Record.record_date >= start_date,
             Record.record_date <= end_date
         ).scalar() or Decimal("0")
-        
+
         # 计算环比
         prev_month = month - 1 if month > 1 else 12
         prev_year = year if month > 1 else year - 1
         prev_start = date(prev_year, prev_month, 1)
         _, prev_last_day = calendar.monthrange(prev_year, prev_month)
         prev_end = date(prev_year, prev_month, prev_last_day)
-        
+
         prev_income = self.db.query(func.sum(Record.amount)).filter(
-            Record.user_id == user_id,
+            Record.user_id.in_(user_ids),
             Record.type == "income",
             Record.record_date >= prev_start,
             Record.record_date <= prev_end
         ).scalar() or Decimal("0")
-        
+
         prev_expense = self.db.query(func.sum(Record.amount)).filter(
-            Record.user_id == user_id,
+            Record.user_id.in_(user_ids),
             Record.type == "expense",
             Record.record_date >= prev_start,
             Record.record_date <= prev_end
         ).scalar() or Decimal("0")
-        
+
         income_trend = float((income - prev_income) / prev_income * 100) if prev_income > 0 else 0.0
         expense_trend = float((expense - prev_expense) / prev_expense * 100) if prev_expense > 0 else 0.0
-        
+
         return {
             "income": income,
             "expense": expense,
@@ -194,8 +215,9 @@ class RecordService:
         }
 
     def get_fixed_records(self, user_id: int) -> List[Record]:
-        """获取固定收支记录"""
+        """获取固定收支记录（合并家庭）"""
+        user_ids = get_family_user_ids(self.db, user_id)
         return self.db.query(Record).filter(
-            Record.user_id == user_id,
+            Record.user_id.in_(user_ids),
             Record.is_fixed == True
         ).order_by(Record.record_date).all()

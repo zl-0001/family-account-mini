@@ -67,7 +67,7 @@
               ></view>
             </view>
           </view>
-          <button class="save-btn" type="primary" @click="handleSave">
+          <button class="save-btn" type="primary" :loading="saving" :disabled="saving" @click="handleSave">
             保存
           </button>
         </view>
@@ -90,6 +90,7 @@ const formPopup = ref<any>(null)
 const isEditing = ref(false)
 const editingId = ref<number | null>(null)
 const typeIndex = ref(0)
+const saving = ref(false)
 
 const typeOptions = ['现金', '银行卡', '支付宝', '微信', '信用卡', '投资账户']
 const typeValues = ['cash', 'bank', 'alipay', 'wechat', 'credit_card', 'investment']
@@ -156,11 +157,13 @@ const handleEdit = (acc: any) => {
 }
 
 const handleSave = async () => {
+  if (saving.value) return
   if (!form.value.name) {
     uni.showToast({ title: '请输入名称', icon: 'none' })
     return
   }
 
+  saving.value = true
   try {
     const data = {
       name: form.value.name,
@@ -179,6 +182,8 @@ const handleSave = async () => {
     fetchAccounts()
   } catch (error: any) {
     uni.showToast({ title: error.message || '保存失败', icon: 'none' })
+  } finally {
+    saving.value = false
   }
 }
 
