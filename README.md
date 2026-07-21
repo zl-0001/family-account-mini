@@ -165,3 +165,14 @@ npm run dev
 ### v1.0.0 (2026-04-03)
 - 项目初始化
 - 基础架构搭建
+
+
+echo -e "[mysqld]\nbind-address = 0.0.0.0" | sudo tee /etc/my.cnf.d/bind.cnf
+sudo systemctl restart mysqld
+
+ 连接超时
+
+ ALTER USER 'fam'@'%' IDENTIFIED WITH mysql_native_password BY 'Chd3123_$';
+FLUSH PRIVILEGES;
+EXIT;
+mysql+pymysql://fam:Chd3123_$@101.200.235.31:10888/family_account

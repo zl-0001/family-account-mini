@@ -97,22 +97,20 @@ class BudgetService:
             Record.record_date <= end_date
         ).scalar() or Decimal("0")
 
-        # 计算各类别支出
+        # 计算各大类支出：预算绑的是大类（父），spent = 该父下所有子分类支出累计
+        # （兼容直接绑子分类的情况：无子则按自身 category_id）
         category_spent = {}
-        if category_budgets:
-            results = self.db.query(
-                Record.category_id,
-                func.sum(Record.amount).label("total")
-            ).filter(
+        for cat_id in category_budgets.keys():
+            child_ids = [c.id for c in self.db.query(Category).filter(Category.parent_id == cat_id).all()]
+            target_ids = child_ids if child_ids else [cat_id]
+            spent = self.db.query(func.sum(Record.amount)).filter(
                 Record.user_id == user_id,
                 Record.type == "expense",
                 Record.record_date >= start_date,
                 Record.record_date <= end_date,
-                Record.category_id.in_(category_budgets.keys())
-            ).group_by(Record.category_id).all()
-
-            for r in results:
-                category_spent[r.category_id] = r.total
+                Record.category_id.in_(target_ids)
+            ).scalar() or Decimal("0")
+            category_spent[cat_id] = spent
 
         # 组装类别详情
         categories = []

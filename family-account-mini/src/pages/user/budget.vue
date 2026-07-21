@@ -27,7 +27,7 @@
       </view>
     </view>
 
-    <!-- 分类预算列表 -->
+    <!-- 大类预算列表 -->
     <view class="budget-list">
       <view
         class="budget-item"
@@ -51,10 +51,9 @@
         </view>
       </view>
 
-      <!-- 空状态 -->
       <view class="empty-tip" v-if="budgetList.length === 0">
         <text>暂无预算配置</text>
-        <text class="empty-sub">点击添加按钮设置预算</text>
+        <text class="empty-sub">点击下方按钮按大类设置预算</text>
       </view>
     </view>
 
@@ -69,15 +68,17 @@
           <text class="close" @click="formPopup.close()">×</text>
         </view>
         <view class="form-content">
-          <view class="form-item" @click="showCategoryPicker = true">
-            <text class="label">支出分类</text>
-            <view class="item-value">
-              <text>{{ selectedCategoryText }}</text>
-              <text class="arrow">›</text>
-            </view>
+          <view class="form-item">
+            <text class="label">支出大类</text>
+            <picker :value="parentIndex" :range="parentOptions" range-key="label" @change="onParentChange">
+              <view class="item-value">
+                <text>{{ selectedCategoryText }}</text>
+                <text class="arrow">›</text>
+              </view>
+            </picker>
           </view>
           <view class="form-item">
-            <text class="label">预算金额</text>
+            <text class="label">预算金额（该大类下所有支出累计扣减）</text>
             <input v-model="form.amount" type="digit" placeholder="请输入预算金额" class="input" />
           </view>
           <button class="save-btn" type="primary" :loading="saving" :disabled="saving" @click="handleSave">
@@ -94,41 +95,21 @@
         </view>
       </view>
     </uni-popup>
-
-    <!-- 分类选择器（分组列表，仅叶子/子分类可选） -->
-    <uni-popup ref="categoryPopup" type="bottom">
-      <view class="picker-content">
-        <view class="picker-header">
-          <text @click="showCategoryPicker = false">取消</text>
-          <text class="picker-title">选择支出分类</text>
-          <text class="picker-placeholder">确定</text>
-        </view>
-        <CategoryTreePicker
-          :categories="expenseCategories"
-          :selected-id="selectedCategory?.id"
-          @pick="onPickCategory"
-        />
-      </view>
-    </uni-popup>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { getBudgets, createBudget, updateBudget, deleteBudget, getCategories, getCategoryStatistics } from '@/api'
-import CategoryTreePicker from '@/components/CategoryTreePicker.vue'
 
 const currentYear = ref(new Date().getFullYear())
 const currentMonth = ref(new Date().getMonth() + 1)
 const budgetList = ref<any[]>([])
 const expenseCategories = ref<any[]>([])
 const formPopup = ref<any>(null)
-const categoryPopup = ref<any>(null)
 const isEditing = ref(false)
 const editingId = ref<number | null>(null)
-
-const showCategoryPicker = ref(false)
-const selectedCategory = ref<any>(null)
+const parentIndex = ref(0)
 const saving = ref(false)
 
 const form = ref({
@@ -139,21 +120,24 @@ const monthStr = computed(
   () => `${currentYear.value}年${currentMonth.value}月`
 )
 
-// 第一个叶子，作为新建预算时的默认选中
-const firstLeaf = computed(() => {
-  const child = expenseCategories.value.find((c: any) => c.parent_id != null)
-  return child || expenseCategories.value[0] || null
-})
+// 只取支出大类（父分类）
+const parentCategories = computed(() =>
+  expenseCategories.value.filter((c: any) => c.parent_id === null)
+)
 
-// 表单项显示文本：带父分类前缀，如「家庭不固定支出 / 餐饮」
+// picker 选项：icon + name
+const parentOptions = computed(() =>
+  parentCategories.value.map((c: any) => ({
+    id: c.id,
+    label: `${c.icon || '📁'} ${c.name}`,
+  }))
+)
+
+const selectedParent = computed(() => parentCategories.value[parentIndex.value] || null)
+
 const selectedCategoryText = computed(() => {
-  const c = selectedCategory.value
-  if (!c) return '请选择'
-  if (c.parent_id != null) {
-    const parent = expenseCategories.value.find((p: any) => p.id === c.parent_id)
-    return parent ? `${parent.name} / ${c.name}` : c.name
-  }
-  return c.name
+  const p = selectedParent.value
+  return p ? `${p.icon || '📁'} ${p.name}` : '请选择'
 })
 
 const totalBudget = computed(() =>
@@ -218,29 +202,40 @@ const fetchCategories = async () => {
 
 const fetchData = async () => {
   try {
-    // 获取预算列表
     const budgetRes: any = await getBudgets(currentYear.value, currentMonth.value)
     const budgets = budgetRes || []
 
-    // 获取分类支出统计
+    // 分类支出统计（子分类维度）
     const statsRes: any = await getCategoryStatistics(
       currentYear.value,
       currentMonth.value,
       'expense'
     )
-    const statsMap = new Map(
-      (statsRes || []).map((s: any) => [s.category_id, s.amount])
-    )
+    const stats = statsRes || []
+    const totalSpent = stats.reduce((sum: number, s: any) => sum + Number(s.amount), 0)
 
-    // 合并数据（金额统一转 number，避免后端 Decimal 字符串参与计算/拼接）
+    // 合并：大类预算 spent = 该大类下所有子分类支出累计（收入不算，仅 expense）
     budgetList.value = budgets.map((b: any) => {
       const amount = Number(b.amount) || 0
-      const spent = Number(statsMap.get(b.category_id)) || 0
+      let spent = 0
+      const parent = expenseCategories.value.find((c: any) => c.id === b.category_id)
+      if (b.category_id) {
+        const childIds = expenseCategories.value
+          .filter((c: any) => c.parent_id === b.category_id)
+          .map((c: any) => c.id)
+        spent = childIds.length
+          ? stats.filter((s: any) => childIds.includes(s.category_id)).reduce((sum: number, s: any) => sum + Number(s.amount), 0)
+          : stats.filter((s: any) => s.category_id === b.category_id).reduce((sum: number, s: any) => sum + Number(s.amount), 0)
+      } else {
+        spent = totalSpent
+      }
       return {
         ...b,
         amount,
         spent,
         percent: amount > 0 ? (spent / amount) * 100 : 0,
+        category_name: parent ? parent.name : '总预算',
+        category_icon: parent?.icon || '💰',
       }
     })
   } catch (error) {
@@ -248,15 +243,14 @@ const fetchData = async () => {
   }
 }
 
-const onPickCategory = (cat: any) => {
-  selectedCategory.value = cat
-  showCategoryPicker.value = false
+const onParentChange = (e: any) => {
+  parentIndex.value = e.detail.value
 }
 
 const handleAdd = () => {
   isEditing.value = false
   editingId.value = null
-  selectedCategory.value = firstLeaf.value
+  parentIndex.value = 0
   form.value.amount = ''
   formPopup.value.open()
 }
@@ -264,15 +258,17 @@ const handleAdd = () => {
 const handleEdit = (item: any) => {
   isEditing.value = true
   editingId.value = item.id
-  selectedCategory.value = expenseCategories.value.find((c: any) => c.id === item.category_id) || null
+  const i = parentCategories.value.findIndex((c: any) => c.id === item.category_id)
+  parentIndex.value = i >= 0 ? i : 0
   form.value.amount = item.amount?.toString() || ''
   formPopup.value.open()
 }
 
 const handleSave = async () => {
   if (saving.value) return
-  if (!selectedCategory.value) {
-    uni.showToast({ title: '请选择分类', icon: 'none' })
+  const parent = selectedParent.value
+  if (!parent) {
+    uni.showToast({ title: '请选择大类', icon: 'none' })
     return
   }
   if (!form.value.amount || parseFloat(form.value.amount) <= 0) {
@@ -283,7 +279,7 @@ const handleSave = async () => {
   saving.value = true
   try {
     const data = {
-      category_id: selectedCategory.value.id,
+      category_id: parent.id,
       year: currentYear.value,
       month: currentMonth.value,
       amount: parseFloat(form.value.amount),
@@ -322,14 +318,6 @@ const handleDelete = () => {
     },
   })
 }
-
-watch(showCategoryPicker, (val) => {
-  if (val) {
-    categoryPopup.value.open()
-  } else {
-    categoryPopup.value.close()
-  }
-})
 
 onMounted(() => {
   fetchCategories()
@@ -557,34 +545,7 @@ onMounted(() => {
       border-radius: 45rpx;
       height: 90rpx;
       line-height: 90rpx;
-      border: 1px solid #ff4d4f;
-    }
-  }
-}
-
-.picker-content {
-  background: #fff;
-  border-radius: 20rpx 20rpx 0 0;
-  padding-bottom: calc(50rpx + env(safe-area-inset-bottom));
-
-  .picker-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 30rpx;
-    border-bottom: 1px solid #eee;
-
-    text {
-      font-size: 28rpx;
-    }
-
-    .picker-title {
-      font-weight: bold;
-      color: #333;
-    }
-
-    .picker-placeholder {
-      visibility: hidden;
+      border: 1rpx solid #ff4d4f;
     }
   }
 }
