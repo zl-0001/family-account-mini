@@ -5,6 +5,7 @@ from datetime import date
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.services.record_service import RecordService
+from app.models import Category, User
 from pydantic import BaseModel, Field, field_validator
 from decimal import Decimal
 from datetime import datetime
@@ -47,6 +48,9 @@ class RecordResponse(BaseModel):
     is_fixed: bool
     fixed_cycle: Optional[str]
     reimbursement_status: str
+    category_name: Optional[str] = None
+    category_icon: Optional[str] = None
+    user_nickname: Optional[str] = None
     created_at: datetime
 
     class Config:
@@ -85,6 +89,25 @@ def create_record(
     return service.create(record_data, current_user.id)
 
 
+def _enrich_records(db: Session, records: list) -> List[RecordResponse]:
+    """给记录补 category_name/icon + user_nickname（Category id 全局唯一，跨家庭成员也能正确显示分类名）"""
+    cat_ids = {r.category_id for r in records if r.category_id}
+    cats = {c.id: c for c in db.query(Category).filter(Category.id.in_(cat_ids)).all()} if cat_ids else {}
+    uids = {r.user_id for r in records}
+    users = {u.id: u for u in db.query(User).filter(User.id.in_(uids)).all()} if uids else {}
+    return [
+        RecordResponse(
+            id=r.id, user_id=r.user_id, account_id=r.account_id, category_id=r.category_id,
+            type=r.type, amount=r.amount, record_date=r.record_date, remark=r.remark,
+            is_fixed=r.is_fixed, fixed_cycle=r.fixed_cycle, reimbursement_status=r.reimbursement_status,
+            created_at=r.created_at,
+            category_name=cats[r.category_id].name if r.category_id in cats else None,
+            category_icon=cats[r.category_id].icon if r.category_id in cats else None,
+            user_nickname=users[r.user_id].nickname if r.user_id in users else None,
+        ) for r in records
+    ]
+
+
 @router.get("", response_model=List[RecordResponse])
 def get_records(
     start_date: Optional[str] = None,
@@ -99,7 +122,7 @@ def get_records(
 ):
     """获取记账记录列表（默认合并家庭；user_id 指定按某成员筛）"""
     service = RecordService(db)
-    return service.get_list(
+    records = service.get_list(
         user_id=current_user.id,
         start_date=start_date,
         end_date=end_date,
@@ -109,6 +132,7 @@ def get_records(
         limit=limit,
         filter_user_id=user_id
     )
+    return _enrich_records(db, records)
 
 
 @router.get("/statistics/monthly", response_model=MonthlyStatistics)
@@ -139,12 +163,12 @@ def get_record(
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user)
 ):
-    """获取单条记录（仅本人）"""
+    """获取单条记录（家庭可查详情；编辑/删除仍仅本人）"""
     service = RecordService(db)
     result = service.get_by_id(record_id, current_user.id)
     if not result:
         raise HTTPException(status_code=404, detail="记录不存在")
-    return result
+    return _enrich_records(db, [result])[0]
 
 
 @router.put("/{record_id}", response_model=RecordResponse)

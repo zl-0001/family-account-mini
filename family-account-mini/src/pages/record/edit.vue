@@ -39,8 +39,9 @@
       <input v-model="form.remark" placeholder="添加备注" class="remark-input" />
     </view>
 
-    <button class="save-btn" type="primary" :loading="saving" :disabled="saving" @click="handleSave">保存</button>
-    <button class="delete-btn" @click="handleDelete">删除记录</button>
+    <button v-if="canEdit" class="save-btn" type="primary" :loading="saving" :disabled="saving" @click="handleSave">保存</button>
+    <view v-else class="readonly-tip">家人的记录，仅可查看（仅本人可编辑/删除）</view>
+    <button v-if="canEdit" class="delete-btn" @click="handleDelete">删除记录</button>
 
     <!-- 分类选择器 -->
     <view class="modal-mask" v-if="showCategoryPicker" @click="showCategoryPicker = false">
@@ -91,6 +92,7 @@ import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { getRecordDetail, updateRecord, deleteRecord, getCategories, getAccounts } from '@/api'
 import CategoryTreePicker from '@/components/CategoryTreePicker.vue'
+import { useUserStore } from '@/stores/user'
 
 const recordId = ref(0)
 const categories = ref<any[]>([])
@@ -98,6 +100,8 @@ const accounts = ref<any[]>([])
 const selectedCategory = ref<any>(null)
 const selectedAccount = ref<any>(null)
 const saving = ref(false)
+const userStore = useUserStore()
+const canEdit = ref(true)
 
 const form = ref({
   type: 'expense' as 'expense' | 'income',
@@ -171,6 +175,7 @@ const loadDetail = async () => {
     form.value.remark = r.remark || ''
     selectedCategory.value = categories.value.find((c: any) => c.id === r.category_id) || null
     selectedAccount.value = accounts.value.find((a: any) => a.id === r.account_id) || null
+    canEdit.value = r.user_id === userStore.userInfo.value?.id
   } catch (e: any) {
     uni.showToast({ title: e.message || '加载失败', icon: 'none' })
   }
@@ -256,6 +261,7 @@ onLoad((q: any) => {
   .remark-input { flex: 1; text-align: right; font-size: 28rpx; }
 }
 .save-btn { margin-top: 20rpx; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border-radius: 45rpx; height: 90rpx; line-height: 90rpx; }
+.readonly-tip { margin-top: 20rpx; text-align: center; color: #999; font-size: 26rpx; padding: 30rpx; }
 .delete-btn { margin-top: 20rpx; background: #fff; color: #ff4d4f; border-radius: 45rpx; height: 90rpx; line-height: 90rpx; border: 1rpx solid #ff4d4f; }
 
 .modal-mask { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 999; display: flex; flex-direction: column; justify-content: flex-end; }

@@ -101,10 +101,12 @@ export const getCategoryStatistics = (
   year: number,
   month: number,
   recordType: string,
-  parentIds?: number[]
+  parentIds?: number[],
+  userId?: number
 ) => {
   const params: any = { year, month, record_type: recordType }
   if (parentIds && parentIds.length) params.parent_ids = parentIds.join(',')
+  if (userId) params.user_id = userId
   return get('/statistics/category', params)
 }
 

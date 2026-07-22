@@ -124,10 +124,11 @@ class RecordService:
         return True
 
     def get_by_id(self, record_id: int, user_id: int) -> Optional[Record]:
-        """获取单条记录（仅本人可查详情用于编辑）"""
+        """获取单条记录（家庭可查详情，编辑/删除仍仅本人）"""
+        user_ids = get_family_user_ids(self.db, user_id)
         return self.db.query(Record).filter(
             Record.id == record_id,
-            Record.user_id == user_id
+            Record.user_id.in_(user_ids)
         ).first()
 
     def get_list(

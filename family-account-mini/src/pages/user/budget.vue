@@ -61,11 +61,11 @@
     <button class="add-btn" @click="handleAdd">设置预算</button>
 
     <!-- 添加/编辑弹窗 -->
-    <uni-popup ref="formPopup" type="bottom">
-      <view class="form-popup">
+    <view class="modal-mask" v-if="showForm" @click="showForm = false">
+      <view class="form-popup" @click.stop>
         <view class="popup-header">
           <text>{{ isEditing ? '编辑预算' : '设置预算' }}</text>
-          <text class="close" @click="formPopup.close()">×</text>
+          <text class="close" @click="showForm = false">×</text>
         </view>
         <view class="form-content">
           <view class="form-item">
@@ -94,19 +94,21 @@
           </button>
         </view>
       </view>
-    </uni-popup>
+    </view>
   </view>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { getBudgets, createBudget, updateBudget, deleteBudget, getCategories, getCategoryStatistics } from '@/api'
+import { useUserStore } from '@/stores/user'
 
+const userStore = useUserStore()
 const currentYear = ref(new Date().getFullYear())
 const currentMonth = ref(new Date().getMonth() + 1)
 const budgetList = ref<any[]>([])
 const expenseCategories = ref<any[]>([])
-const formPopup = ref<any>(null)
+const showForm = ref(false)
 const isEditing = ref(false)
 const editingId = ref<number | null>(null)
 const parentIndex = ref(0)
@@ -209,7 +211,9 @@ const fetchData = async () => {
     const statsRes: any = await getCategoryStatistics(
       currentYear.value,
       currentMonth.value,
-      'expense'
+      'expense',
+      undefined,
+      userStore.userInfo.value?.id
     )
     const stats = statsRes || []
     const totalSpent = stats.reduce((sum: number, s: any) => sum + Number(s.amount), 0)
@@ -252,7 +256,7 @@ const handleAdd = () => {
   editingId.value = null
   parentIndex.value = 0
   form.value.amount = ''
-  formPopup.value.open()
+  showForm.value = true
 }
 
 const handleEdit = (item: any) => {
@@ -261,7 +265,7 @@ const handleEdit = (item: any) => {
   const i = parentCategories.value.findIndex((c: any) => c.id === item.category_id)
   parentIndex.value = i >= 0 ? i : 0
   form.value.amount = item.amount?.toString() || ''
-  formPopup.value.open()
+  showForm.value = true
 }
 
 const handleSave = async () => {
@@ -290,7 +294,7 @@ const handleSave = async () => {
       await createBudget(data)
     }
     uni.showToast({ title: '保存成功', icon: 'success' })
-    formPopup.value.close()
+    showForm.value = false
     fetchData()
   } catch (error: any) {
     uni.showToast({ title: error.message || '保存失败', icon: 'none' })
@@ -309,7 +313,7 @@ const handleDelete = () => {
         try {
           await deleteBudget(editingId.value!)
           uni.showToast({ title: '删除成功', icon: 'success' })
-          formPopup.value.close()
+          showForm.value = false
           fetchData()
         } catch (error: any) {
           uni.showToast({ title: error.message || '删除失败', icon: 'none' })
@@ -476,6 +480,19 @@ onMounted(() => {
   border-radius: 45rpx;
   height: 90rpx;
   line-height: 90rpx;
+}
+
+.modal-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
 .form-popup {

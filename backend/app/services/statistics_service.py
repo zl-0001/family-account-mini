@@ -121,9 +121,9 @@ class StatisticsService:
             "monthly_data": monthly_data
         }
 
-    def get_category_stats(self, user_id: int, year: int, month: int, record_type: str, parent_ids: List[int] = None) -> List[dict]:
-        """获取分类统计（合并家庭）。parent_ids 为父分类 id 列表（多选），留空=全部"""
-        user_ids = get_family_user_ids(self.db, user_id)
+    def get_category_stats(self, user_id: int, year: int, month: int, record_type: str, parent_ids: List[int] = None, filter_user_id: int = None) -> List[dict]:
+        """获取分类统计（默认合并家庭；filter_user_id 指定只看某成员）。parent_ids 父分类多选，留空=全部"""
+        target_ids = [filter_user_id] if filter_user_id else get_family_user_ids(self.db, user_id)
         start_date = date(year, month, 1)
         _, last_day = calendar.monthrange(year, month)
         end_date = date(year, month, last_day)
@@ -133,7 +133,7 @@ class StatisticsService:
             func.sum(Record.amount).label("total_amount"),
             func.count(Record.id).label("count")
         ).filter(
-            Record.user_id.in_(user_ids),
+            Record.user_id.in_(target_ids),
             Record.type == record_type,
             Record.record_date >= start_date,
             Record.record_date <= end_date

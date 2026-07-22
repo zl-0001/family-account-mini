@@ -19,12 +19,12 @@
     </view>
 
     <view class="record-list">
-      <view class="record-item" v-for="r in list" :key="r.id" @click="goEdit(r)">
-        <text class="r-icon">{{ catOf(r.category_id)?.icon || '📁' }}</text>
+      <view class="record-item" v-for="r in list" :key="r.id" @click="goDetail(r)">
+        <text class="r-icon">{{ r.category_icon || '📁' }}</text>
         <view class="r-info">
           <text class="r-cat">
-            {{ catOf(r.category_id)?.name || '未分类' }}
-            <text v-if="memberName(r.user_id)" class="r-owner">· {{ memberName(r.user_id) }}</text>
+            {{ r.category_name || '未分类' }}
+            <text v-if="r.user_nickname" class="r-owner">· {{ r.user_nickname }}</text>
           </text>
           <text class="r-meta">{{ r.record_date }}{{ r.remark ? ' · ' + r.remark : '' }}</text>
         </view>
@@ -41,18 +41,18 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { onShow, onReachBottom } from '@dcloudio/uni-app'
-import { getRecords, getCategories, getAccounts, getFamilyMembers } from '@/api'
+import { getRecords, getFamilyMembers } from '@/api'
 import { useUserStore } from '@/stores/user'
 
 const userStore = useUserStore()
 const isFamily = computed(() => !!userStore.userInfo.value?.family_id)
+const currentUserId = computed(() => userStore.userInfo.value?.id)
 
 const now = new Date()
 const currentYear = ref(now.getFullYear())
 const currentMonth = ref(now.getMonth() + 1)
 const filterType = ref('')
 const list = ref<any[]>([])
-const categories = ref<any[]>([])
 const members = ref<any[]>([])
 const memberIndex = ref(0)
 const skip = ref(0)
@@ -61,7 +61,6 @@ const noMore = ref(false)
 const loadingMore = ref(false)
 
 const monthStr = computed(() => `${currentYear.value}年${currentMonth.value}月`)
-const catOf = (id: number) => categories.value.find((c: any) => c.id === id)
 const toFixed = (v: any) => {
   const n = typeof v === 'string' ? parseFloat(v) || 0 : Number(v) || 0
   return n.toFixed(2)
@@ -72,11 +71,6 @@ const memberOptions = computed(() => [
   ...members.value.map((m: any) => ({ user_id: m.user_id as number | null, nickname: m.nickname || m.username })),
 ])
 const currentFilterUid = computed(() => memberOptions.value[memberIndex.value]?.user_id ?? null)
-const memberName = (uid: number) => {
-  if (!isFamily.value) return ''
-  const m = members.value.find((x: any) => x.user_id === uid)
-  return m ? (m.nickname || m.username) : ''
-}
 
 const monthRange = () => {
   const y = currentYear.value, m = currentMonth.value
@@ -130,16 +124,12 @@ const onMemberChange = (e: any) => {
   fetchList()
 }
 
-const goEdit = (r: any) => {
+const goDetail = (r: any) => {
+  // 本人 → 编辑；家人 → 只读详情（同一页，edit 页按 user_id 切换）
   uni.navigateTo({ url: `/pages/record/edit?id=${r.id}` })
 }
 
 onShow(() => {
-  Promise.all([getCategories(), getAccounts()])
-    .then(([c]: any) => {
-      categories.value = c || []
-    })
-    .catch(() => {})
   if (isFamily.value) {
     getFamilyMembers().then((m: any) => { members.value = m || [] }).catch(() => {})
   }
